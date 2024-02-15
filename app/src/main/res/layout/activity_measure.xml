@@ -121,10 +121,20 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp">
+        <EditText
+            android:layout_width="50dp"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="15dp"
+            android:text="60"
+            android:id="@+id/save_time"/>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="sec"/>
         <Button
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginLeft="30dp"
+            android:layout_marginLeft="15dp"
             android:text="Start"
             android:id="@+id/start" />
         <Button
@@ -151,10 +161,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="200dp"
                 android:id="@+id/graph_iv"/>
-            <com.github.mikephil.charting.charts.LineChart
-                android:layout_width="match_parent"
-                android:layout_height="200dp"
-                android:id="@+id/graph_response"/>
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

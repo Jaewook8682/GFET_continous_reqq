@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?><!-- Strings used in the application -->
 <resources>
-    <string name="app_name">Zhang Lab #App3</string>
+    <string name="app_name">Zhang Lab #App4</string>
     <string name="ble_not_supported">BLE is not supported</string>
     <string name="unknown_device">Unknown Device</string>
     <string name="enabling_bluetooth">Enabling Bluetooth</string>

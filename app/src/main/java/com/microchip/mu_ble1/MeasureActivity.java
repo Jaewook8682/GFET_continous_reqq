@@ -3,16 +3,22 @@ package com.microchip.mu_ble1;
 import static android.content.ContentValues.TAG;
 import static com.microchip.mu_ble1.BleMainActivity.bleGlobalAddress;
 import static com.microchip.mu_ble1.BleMainActivity.bleService;
+import static com.microchip.mu_ble1.MeasureActivity.et_save_time;
+import static com.microchip.mu_ble1.MeasureActivity.max_loop;
+import static com.microchip.mu_ble1.MeasureActivity.min_loop;
+import static com.microchip.mu_ble1.MeasureActivity.t2;
+import static com.microchip.mu_ble1.MeasureActivity.t3;
+import static com.microchip.mu_ble1.MeasureActivity.t4;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 
 import android.annotation.SuppressLint;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
 import android.graphics.Color;
+import android.icu.util.Measure;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -26,6 +32,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.github.mikephil.charting.charts.LineChart;
+import com.github.mikephil.charting.components.XAxis;
 import com.github.mikephil.charting.components.YAxis;
 import com.github.mikephil.charting.data.Entry;
 import com.github.mikephil.charting.data.LineData;
@@ -47,19 +54,23 @@ public class MeasureActivity extends AppCompatActivity {
     private DatabaseReference databaseReference;
     private FirebaseDatabase database;
     private static LineChart chart_iv;
-    private static LineChart chart_res;
     public static TextView vds_tv_2, gain_tv_2, duty_tv_2, stm_tv_2, test_tv_2;
-    public static int interval_n, d_num = 0, measure_n;
-    public static String[] arr_rcv, arr_rsp;
+    public static int interval_n, d_num = 0, min_d = 0, measure_n;
+    public static String[] arr_rcv;
     public static String vds="0", gain="0", duty="0", stm="0", test="0";
     public static String G_BLE_Connection = "0";
     static TextView tv_ble;
-    private int stop_n = 0;
-
+    static EditText et_save_time;
+    public static ArrayList<Entry> val_iv  = new ArrayList<>();
+    static long t1, t2, t3, t4, t5, t6;
+    static float min_loop, max_loop;
+    static int start_time;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_measure);
+
+        Thread thread = new continuous_req();
 
         database = FirebaseDatabase.getInstance();
         databaseReference = database.getReference("User");
@@ -71,23 +82,25 @@ public class MeasureActivity extends AppCompatActivity {
         test_tv_2  = findViewById(R.id.test_tv2);
 
         // Graph View
-        chart_iv  = findViewById(R.id.graph_iv);
-        chart_iv.getLegend().setEnabled(true);
-        chart_iv.setTouchEnabled(true);
-        chart_iv.setDoubleTapToZoomEnabled(true);
-        chart_iv.invalidate();
-        LineData data = new LineData();
-        chart_iv.setData(data);
+        chart_iv  = (LineChart) findViewById(R.id.graph_iv);
 
-        chart_res = findViewById(R.id.graph_response);
-        chart_res.getLegend().setEnabled(true);
-        chart_res.setTouchEnabled(true);
-        chart_res.setDoubleTapToZoomEnabled(true);
-        chart_res.invalidate();
-        LineData data2 = new LineData();
-        chart_res.setData(data2);
+        chart_iv.getXAxis().setPosition(XAxis.XAxisPosition.BOTTOM);
+        chart_iv.getAxisRight().setEnabled(false);
+        chart_iv.animateXY(2000, 2000);
+        chart_iv.invalidate();
+
+        LineData data_iv = new LineData();
+        chart_iv.setData(data_iv);
+        XAxis xAxis = chart_iv.getXAxis();
+        xAxis.setPosition(XAxis.XAxisPosition.BOTTOM);
+
+
+        LineDataSet lineDataSet_iv = new LineDataSet(val_iv, "data1");
+        lineDataSet_iv.setColor(Color.BLUE);
+        lineDataSet_iv.setDrawCircles(false);
 
         tv_ble = findViewById(R.id.ble_status);
+        et_save_time = findViewById(R.id.save_time);
 
         Button bt_setting = findViewById(R.id.set_btn);
         bt_setting.setOnClickListener(new View.OnClickListener() {
@@ -112,17 +125,7 @@ public class MeasureActivity extends AppCompatActivity {
             public void onClick(View view) {
                 String sendData = "g";
                 arr_rcv = new String[300];
-                arr_rsp = new String[1];
                 measure_n = 1;
-
-                chart_iv.invalidate();
-                LineData data = new LineData();
-                chart_iv.setData(data);
-
-                chart_res.invalidate();
-                LineData data2 = new LineData();
-                chart_res.setData(data2);
-
                 bleService.writeToTransparentUART(sendData.getBytes());
             }
         });
@@ -139,27 +142,8 @@ public class MeasureActivity extends AppCompatActivity {
         bt_start.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Log.d("START", "CLICKED");
-                chart_iv.invalidate();
-                LineData data = new LineData();
-                chart_iv.setData(data);
-
-                chart_res.invalidate();
-                LineData data2 = new LineData();
-                chart_res.setData(data2);
-
-                d_num = 0;
-                arr_rcv = new String[2];
-                arr_rsp = new String[1];
-                String sendData = "g";
-                while(stop_n == 0){
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
-                    bleService.writeToTransparentUART(sendData.getBytes());
-                }
+                //@@
+                thread.start();
             }
         });
 
@@ -167,10 +151,9 @@ public class MeasureActivity extends AppCompatActivity {
         bt_stop.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
+                thread.interrupt();
             }
         });
-
 
         Button clear_ = findViewById(R.id.clear);
         clear_.setOnClickListener(new View.OnClickListener() {
@@ -178,11 +161,9 @@ public class MeasureActivity extends AppCompatActivity {
             public void onClick(View view) {
                 Log.d("Clear", "CLICKED");
                 Arrays.fill(arr_rcv, "0");
-                Arrays.fill(arr_rsp, "0");
+
                 chart_iv.invalidate();
                 chart_iv.clear();
-                chart_res.invalidate();
-                chart_res.clear();
             }
         });
 
@@ -235,9 +216,6 @@ public class MeasureActivity extends AppCompatActivity {
             String d0 = Arrays.toString(d1);
             databaseReference.child(fileTitle).child("iv"+(i+1)).setValue(d0);
         }
-
-        String d2 = Arrays.toString(arr_rsp);
-        databaseReference.child(fileTitle).child("Lowest points").setValue(d2);
     }
 
     public void writeFile(String fileTitle) throws IOException {
@@ -256,10 +234,9 @@ public class MeasureActivity extends AppCompatActivity {
             throw new RuntimeException(e);
         }
         try{
-            int ll = arr_rcv.length + arr_rsp.length;
+            int ll = arr_rcv.length;
             String[] saving_arr = new String[ll];
             System.arraycopy(arr_rcv, 0, saving_arr, 0, arr_rcv.length);
-            System.arraycopy(arr_rsp, 0, saving_arr, arr_rcv.length, arr_rsp.length);
             fos.write(Arrays.toString(saving_arr).getBytes());
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -270,98 +247,61 @@ public class MeasureActivity extends AppCompatActivity {
     }
 
     public static void processIncomingData(byte[] newBytes) {
-        try {
             int d_len = Hex.bytesToStringUppercase(newBytes).length();
-            Log.d("Requesting..", "("+String.valueOf(interval_n+1)+"/"+ String.valueOf(measure_n)+")");
-            Log.d("Received Length", String.valueOf(d_len));
 
             if(d_len > 0) {
                 String d11 = String.valueOf(Hex.bytesToStringUppercase(newBytes).charAt(2));
                 String d12 = String.valueOf(Hex.bytesToStringUppercase(newBytes).charAt(3));
                 String d13 = String.valueOf(Hex.bytesToStringUppercase(newBytes).charAt(0));
                 String d14 = String.valueOf(Hex.bytesToStringUppercase(newBytes).charAt(1));
-                Log.d("what data?", String.valueOf(Integer.valueOf(d11 + d12 + d13 + d14, 16)));
 
                 String d21 = String.valueOf(Hex.bytesToStringUppercase(newBytes).charAt(6));
                 String d22 = String.valueOf(Hex.bytesToStringUppercase(newBytes).charAt(7));
                 String d23 = String.valueOf(Hex.bytesToStringUppercase(newBytes).charAt(4));
                 String d24 = String.valueOf(Hex.bytesToStringUppercase(newBytes).charAt(5));
-                Log.d("what data?", String.valueOf(Integer.valueOf(d21 + d22 + d23 + d24, 16)));
 
-                arr_rcv[d_num]   = String.valueOf(Integer.valueOf(d11 + d12 + d13 + d14, 16));
+                arr_rcv[d_num] = String.valueOf(Integer.valueOf(d11 + d12 + d13 + d14, 16));
                 arr_rcv[d_num+1] = String.valueOf(Integer.valueOf(d21 + d22 + d23 + d24, 16));
-                d_num+2
                 addEntry();
             }
-        } catch (Exception e) {
-            Log.e(TAG, "55Oops, exception caught in " + e.getStackTrace()[0].getMethodName() + ": " + e.getMessage());
-        }
     }
 
     private static void addEntry() {
         int[] cc = {Color.RED, Color.GREEN, Color.BLUE, Color.YELLOW, Color.GRAY, Color.CYAN, Color.BLACK, Color.MAGENTA, Color.DKGRAY, Color.LTGRAY};
 
         LineData data_iv = chart_iv.getData();
-        LineData data_rs = chart_res.getData();
 
         if(data_iv != null) {
-            Log.d("Draw", "IT!");
+
             ILineDataSet set_iv = data_iv.getDataSetByIndex(0);
-            ILineDataSet set_rs = data_rs.getDataSetByIndex(0);
+
             if (set_iv == null) {
                 set_iv = createSet();
                 data_iv.addDataSet(set_iv);
             }
-            if (set_rs == null) {
-                set_rs = createSet();
-                data_rs.addDataSet(set_rs);
+
+            int rxd1 = Integer.parseInt(arr_rcv[d_num]);
+            int rxd2 = Integer.parseInt(arr_rcv[d_num+1]);
+
+            data_iv.addEntry(new Entry(set_iv.getEntryCount(), rxd1), 0);
+            data_iv.notifyDataChanged();
+            chart_iv.notifyDataSetChanged();
+
+
+            data_iv.addEntry(new Entry(set_iv.getEntryCount(), rxd2), 0);
+            data_iv.notifyDataChanged();
+            chart_iv.notifyDataSetChanged();
+
+            chart_iv.setVisibleXRangeMaximum(10);
+            chart_iv.moveViewToX(data_iv.getEntryCount());
+
+            if(d_num == 0){
+                start_time = (int) System.currentTimeMillis();
             }
 
-            ArrayList<Entry> val_iv  = new ArrayList<>();
-            ArrayList<Entry> val_rs  = new ArrayList<>();
-
-
-
-            for(int i = 0; i < measure_n; i++){
-                ArrayList<Entry> val_iv  = new ArrayList<>();
-                ArrayList<Entry> val_rs  = new ArrayList<>();
-                int min_d = 0;
-                for(int j = 0; j < 300; j++){
-                    int rxd = Integer.parseInt(arr_rcv[(i*300)+j]);
-                    val_iv.add(new Entry(j, rxd));
-                    if(j==0){
-                        min_d = rxd;
-                    } else if (min_d > rxd) {
-                        min_d = rxd;
-                    }
-                }
-                val_rs.add(new Entry(i, min_d));
-                arr_rsp[i] = String.valueOf(min_d);
-                //iv start
-                LineDataSet lineDataSet_iv = new LineDataSet(val_iv, "iv"+(i+1));
-                lineDataSet_iv.setColor(cc[i]);
-                lineDataSet_iv.setDrawCircles(false);
-                data_iv.addDataSet(lineDataSet_iv);
-
-                chart_iv.notifyDataSetChanged();
-                chart_iv.setVisibleXRangeMaximum(300);
-                chart_iv.moveViewToX(data_iv.getEntryCount());
-                chart_iv.setData(data_iv);
-
-                chart_iv.invalidate();
-
-                // rs start
-                LineDataSet lineDataSet_rs = new LineDataSet(val_rs, "iv"+i);
-                lineDataSet_rs.setColor(cc[i]);
-                lineDataSet_rs.setCircleColor(cc[i]);
-                data_rs.addDataSet(lineDataSet_rs);
-
-                chart_res.notifyDataSetChanged();
-                chart_res.setVisibleXRangeMaximum(measure_n);
-                chart_res.moveViewToX(data_rs.getEntryCount());
-                chart_res.setData(data_rs);
-                chart_res.invalidate();
-            }
+            d_num += 2;
+            String[] newArr = Arrays.copyOf(arr_rcv, arr_rcv.length+2);
+            arr_rcv = newArr;
         }
     }
 
@@ -372,6 +312,7 @@ public class MeasureActivity extends AppCompatActivity {
         set.setColor(Color.parseColor("#800080"));
         set.setValueTextColor(Color.WHITE);
         set.setDrawValues(false);
+        set.setDrawCircles(false);
         set.setLineWidth(2);
         set.setValueTextSize(9f);
 
@@ -424,3 +365,58 @@ public class MeasureActivity extends AppCompatActivity {
         tv_ble.setText("connected");
     }
 }
+
+class continuous_req extends Thread{
+    @Override
+    public void run(){
+        MeasureActivity.arr_rcv = new String[2];
+        String sendData = "g";
+        int i = 0;
+        while(true) {
+            if (i == 0) {
+                MeasureActivity.t1 = System.nanoTime();
+                min_loop = (long) 10.0;  //그냥 적당히 큰 값으로..
+                max_loop = (long) 0.0;
+            } else{
+                t2 = System.nanoTime();
+                float loop_time2 = (float) ((t2 - MeasureActivity.t1)/ Math.pow(10, 9));
+                System.out.println("One-loop : "+ loop_time2);
+                if (min_loop > loop_time2){
+                    min_loop = loop_time2;
+                }
+                if (max_loop < loop_time2 ){
+                    max_loop = loop_time2;
+                }
+
+                if(loop_time2 <0.06){
+                    try {
+                        float add_time = (float) ((0.06 - loop_time2) * Math.pow(10, 3));
+                        Log.d("add : ", String.valueOf(add_time)+"ms");
+                        Thread.sleep((long) add_time);
+                        t3 = System.nanoTime();
+                        Log.d("after adding time : ", String.valueOf((t3- MeasureActivity.t1)/ Math.pow(10, 9)));
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                } else{
+                    Log.d("over", "60ms");
+                }
+            }
+            try {
+                Thread.sleep(40);
+
+            } catch (InterruptedException e) {
+                break;
+            }
+            i++;
+            MeasureActivity.t1 = t2;
+            bleService.writeToTransparentUART(sendData.getBytes());
+        }
+    }
+}
+
+
+
+
+
+
